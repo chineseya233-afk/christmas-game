@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>圣诞树保卫战</title>
+    <style>
+        /* --- 样式保持不变 --- */
+        body { margin: 0; overflow: hidden; background-color: #0d1b2a; font-family: 'Arial', sans-serif; touch-action: none; user-select: none; -webkit-user-select: none; }
+        canvas { display: block; position: absolute; top: 0; left: 0; z-index: 1; }
+        .screen { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 10; transition: opacity 0.3s; }
+        .hidden { display: none !important; opacity: 0; pointer-events: none; }
+        .card { background: rgba(255, 255, 255, 0.15); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); padding: 30px; border-radius: 20px; border: 1px solid rgba(255, 255, 255, 0.2); text-align: center; color: white; box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37); max-width: 85%; width: 320px; }
+        h1 { margin: 0 0 20px 0; font-size: 32px; color: #ffda79; text-shadow: 0 0 10px #e1b12c; animation: pulse 2s infinite; }
+        h2 { margin: 10px 0; color: #fab1a0; }
+        p { margin: 10px 0; color: #dfe6e9; font-size: 14px; }
+        .btn-group { display: flex; flex-direction: column; gap: 15px; margin-top: 25px; width: 100%; }
+        .btn { background: linear-gradient(45deg, #d63031, #ff7675); border: none; color: white; padding: 14px 0; border-radius: 50px; font-size: 18px; font-weight: bold; cursor: pointer; width: 100%; box-shadow: 0 4px 15px rgba(214, 48, 49, 0.4); transition: transform 0.1s; }
+        .btn:active { transform: scale(0.95); }
+        .btn-secondary { background: linear-gradient(45deg, #0984e3, #74b9ff); box-shadow: 0 4px 15px rgba(9, 132, 227, 0.4); }
+        #hud-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 5; }
+        .hud-top { display: flex; justify-content: space-between; padding: 15px 20px; color: white; font-size: 20px; font-weight: bold; text-shadow: 2px 2px 4px rgba(0,0,0,0.8); align-items: center; }
+        .difficulty-badge { font-size: 12px; background: rgba(0,0,0,0.4); padding: 4px 8px; border-radius: 10px; color: #fab1a0; margin-top: 5px; transition: color 0.5s; }
+        #invincible-bar-container { position: absolute; top: 75px; left: 20px; right: 20px; height: 6px; background: rgba(255,255,255,0.2); border-radius: 3px; overflow: hidden; }
+        #invincible-bar { width: 0%; height: 100%; background: linear-gradient(90deg, #ff0000, #ffff00, #00ff00, #00ffff, #0000ff, #ff00ff, #ff0000); background-size: 200% 100%; animation: rainbowMove 2s linear infinite; }
+        .rank-list { list-style: none; padding: 0; margin: 15px 0; text-align: left; background: rgba(0,0,0,0.3); border-radius: 10px; padding: 10px; max-height: 150px; overflow-y: auto; }
+        .rank-item { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid rgba(255,255,255,0.1); font-size: 14px; }
+        .rank-item:last-child { border-bottom: none; }
+        .rank-badge { color: #ffeaa7; font-weight: bold; width: 20px; text-align: center; }
+        .rank-score { color: #55efc4; font-weight: bold; }
+        @keyframes pulse { 0% { transform: scale(1); text-shadow: 0 0 10px #e1b12c; } 50% { transform: scale(1.05); text-shadow: 0 0 20px #e1b12c, 0 0 40px #ff9f43; } 100% { transform: scale(1); text-shadow: 0 0 10px #e1b12c; } }
+        @keyframes rainbowMove { 0% { background-position: 100% 0; } 100% { background-position: 0 0; } }
+    </style>
+</head>
+<body>
+
+    <canvas id="gameCanvas"></canvas>
+
+    <div id="screen-menu" class="screen">
+        <div class="card">
+            <h1>🎄 圣诞大作战</h1>
+            <p>💡 接住彩灯得分</p>
+            <p>💣 躲避炸弹 (一击必杀)</p>
+            <p>🌟 超级星星 = 无敌模式</p>
+            <div class="btn-group">
+                <button class="btn" onclick="Game.start()">开始挑战</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="screen-game" class="screen hidden" style="pointer-events: none; justify-content: flex-start;">
+        <div class="hud-top" style="width: 100%; box-sizing: border-box;">
+            <div>
+                <div>得分: <span id="score-display" style="color:#55efc4">0</span></div>
+                <div class="difficulty-badge">强度: <span id="intensity-display">Level 1</span></div>
+            </div>
+            <div>生命: <span id="lives-display">❤️❤️❤️</span></div>
+        </div>
+        <div id="invincible-bar-container">
+            <div id="invincible-bar"></div>
+        </div>
+    </div>
+
+    <div id="screen-over" class="screen hidden">
+        <div class="card">
+            <h2>🎮 游戏结束</h2>
+            <div style="font-size: 48px; font-weight: bold; margin: 10px 0; color:#ff7675" id="final-score">0</div>
+            <div class="rank-list" id="leaderboard"></div>
+            <div class="btn-group">
+                <button class="btn" onclick="Game.restart()">再玩一次</button>
+                <button class="btn btn-secondary" onclick="Game.toMenu()">返回菜单</button>
+            </div>
+        </div>
+    </div>
+
+<script>
+    const ASSETS_CONFIG = {
+        tree: 'tree.png',
+        bomb: 'bomb.png',
+        star: 'star.png',
+        lights: ['light1.png', 'light2.png', 'light3.png', 'light4.png', 'light5.png'] 
+    };
+
+    const Game = {
+        canvas: document.getElementById('gameCanvas'),
+        ctx: null,
+        width: 0,
+        height: 0,
+        
+        state: 'MENU',
+        score: 0,
+        lives: 3,
+        items: [],
+        particles: [],
+        
+        // [修改] 排行榜数据只保存在内存中，刷新即丢失
+        sessionScores: [],
+        
+        assets: { tree: null, bomb: null, star: null, lights: [] },
+
+        startTime: 0, elapsedTime: 0, currentLevel: 1, lastTime: 0, spawnTimer: 0,
+        isInvincible: false, invincibleTimer: 0, INVINCIBLE_DURATION: 5000,
+
+        init() {
+            this.ctx = this.canvas.getContext('2d');
+            this.resize();
+            window.addEventListener('resize', () => this.resize());
+            ['mousedown', 'touchstart'].forEach(evt => 
+                window.addEventListener(evt, e => this.handleInput(e), {passive: false})
+            );
+            this.loadImages(() => {
+                this.toMenu();
+                this.loop = this.loop.bind(this);
+                requestAnimationFrame(this.loop);
+            });
+        },
+
+        loadImages(callback) {
+            let loadedCount = 0;
+            let totalImages = 3 + ASSETS_CONFIG.lights.length;
+            const checkLoad = () => { if (++loadedCount >= totalImages) callback(); };
+            
+            this.assets.tree = new Image(); this.assets.tree.src = ASSETS_CONFIG.tree; this.assets.tree.onload = checkLoad;
+            this.assets.tree.onerror = () => { console.warn("tree.png needed"); checkLoad(); };
+            
+            this.assets.bomb = new Image(); this.assets.bomb.src = ASSETS_CONFIG.bomb; this.assets.bomb.onload = checkLoad;
+            this.assets.star = new Image(); this.assets.star.src = ASSETS_CONFIG.star; this.assets.star.onload = checkLoad;
+            ASSETS_CONFIG.lights.forEach(src => { let img = new Image(); img.src = src; img.onload = checkLoad; this.assets.lights.push(img); });
+        },
+
+        resize() {
+            this.width = window.innerWidth;
+            this.height = window.innerHeight;
+            this.canvas.width = this.width;
+            this.canvas.height = this.height;
+        },
+
+        toMenu() {
+            this.state = 'MENU';
+            this.items = [];
+            this.particles = [];
+            this.isInvincible = false;
+            this.currentLevel = 1;
+            this.switchScreen('screen-menu');
+        },
+
+        start() {
+            this.score = 0; this.lives = 3; this.items = []; this.particles = [];
+            this.isInvincible = false; this.spawnTimer = 0;
+            this.startTime = Date.now(); this.elapsedTime = 0; this.currentLevel = 1;
+            this.updateHUD();
+            this.state = 'PLAYING';
+            this.switchScreen('screen-game');
+        },
+        restart() { this.start(); },
+        gameOver() {
+            this.state = 'OVER';
+            this.saveScore(this.score);
+            this.renderLeaderboard();
+            document.getElementById('final-score').innerText = this.score;
+            this.switchScreen('screen-over');
+        },
+
+        // [修改] 排行榜逻辑：只使用内存变量 this.sessionScores
+        saveScore(score) {
+            if(score === 0) return;
+            // 存入当前会话数组
+            this.sessionScores.push({ date: new Date().toLocaleTimeString(), score: score }); // 用时间更直观
+            // 排序
+            this.sessionScores.sort((a, b) => b.score - a.score);
+            // 只保留前5
+            this.sessionScores = this.sessionScores.slice(0, 5);
+        },
+
+        // [修改] 从内存变量读取
+        renderLeaderboard() {
+            const list = document.getElementById('leaderboard');
+            if (this.sessionScores.length === 0) { 
+                list.innerHTML = '<div class="rank-item" style="justify-content:center; color:#aaa;">暂无本局记录</div>'; 
+                return; 
+            }
+            let html = '';
+            this.sessionScores.forEach((item, index) => {
+                let badge = index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : (index+1);
+                html += `<div class="rank-item"><span class="rank-badge">${badge}</span><span style="color:#bbb; font-size:12px;">${item.date}</span><span class="rank-score">${item.score}分</span></div>`;
+            });
+            list.innerHTML = html;
+        },
+
+        switchScreen(id) {
+            document.querySelectorAll('.screen').forEach(el => el.classList.add('hidden'));
+            document.getElementById(id).classList.remove('hidden');
+        },
+        updateHUD() {
+            document.getElementById('score-display').innerText = this.score;
+            let levelText = "Level 1"; let color = "#fab1a0";
+            if (this.currentLevel === 2) { levelText = "Level 2 (加速)"; color = "#fdcb6e"; }
+            if (this.currentLevel === 3) { levelText = "Level 3 (双倍)"; color = "#e17055"; }
+            if (this.currentLevel >= 4) { levelText = "MAX (暴走!)"; color = "#d63031"; }
+            const badge = document.getElementById('intensity-display');
+            badge.innerText = levelText; badge.style.color = color;
+            let hearts = ""; for(let i=0; i<this.lives; i++) hearts += "❤️";
+            document.getElementById('lives-display').innerText = hearts;
+            const bar = document.getElementById('invincible-bar');
+            if (this.isInvincible) {
+                let remaining = Math.max(0, this.invincibleTimer - Date.now());
+                bar.style.width = (remaining / this.INVINCIBLE_DURATION) * 100 + '%';
+                if (remaining <= 0) this.isInvincible = false;
+            } else { bar.style.width = '0%'; }
+        },
+        handleInput(e) {
+            if (this.state !== 'PLAYING') return;
+            if (e.target.tagName === 'BUTTON') return;
+            e.preventDefault();
+            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+            for (let i = this.items.length - 1; i >= 0; i--) {
+                let item = this.items[i];
+                let dist = Math.hypot(item.x - clientX, item.y - clientY);
+                if (dist < 50) { this.resolveClick(item, i); return; }
+            }
+        },
+        resolveClick(item, index) {
+            if (item.type === 'light') {
+                this.score++; this.createExplosion(item.x, item.y, '✨', '#ffeaa7'); this.items.splice(index, 1);
+            } else if (item.type === 'bomb') {
+                if (this.isInvincible) {
+                    this.score += 2; this.createExplosion(item.x, item.y, '💨', '#fff'); this.items.splice(index, 1);
+                } else {
+                    this.createExplosion(item.x, item.y, '💥', '#ff7675'); this.lives = 0; this.gameOver();
+                }
+            } else if (item.type === 'super') {
+                this.isInvincible = true; this.invincibleTimer = Date.now() + this.INVINCIBLE_DURATION;
+                this.createExplosion(item.x, item.y, '🌈', '#00cec9'); this.items.splice(index, 1);
+            }
+            this.updateHUD();
+        },
+        createExplosion(x, y, text, color) {
+            for(let i=0; i<5; i++) {
+                this.particles.push({ x, y, vx: (Math.random()-0.5)*8, vy: (Math.random()-0.5)*8, life: 1.0, text, color });
+            }
+        },
+        loop() {
+            let now = Date.now(); let dt = now - this.lastTime; this.lastTime = now;
+            this.ctx.fillStyle = '#0d1b2a';
+            this.ctx.fillRect(0, 0, this.width, this.height);
+            
+            this.drawBackgroundTree(); 
+
+            if (this.state === 'PLAYING') {
+                this.elapsedTime = (now - this.startTime) / 1000;
+                let spawnInterval = 800; let simultaneousSpawns = 1; let speedMultiplier = 1.0;
+                if (this.elapsedTime < 15) { this.currentLevel = 1; spawnInterval = 700; }
+                else if (this.elapsedTime < 30) { this.currentLevel = 2; spawnInterval = 500; speedMultiplier = 1.3; }
+                else if (this.elapsedTime < 50) { this.currentLevel = 3; spawnInterval = 450; speedMultiplier = 1.6; if (Math.random() < 0.4) simultaneousSpawns = 2; }
+                else { this.currentLevel = 4; spawnInterval = 300; speedMultiplier = 2.0; let r = Math.random(); if (r < 0.5) simultaneousSpawns = 2; if (r < 0.2) simultaneousSpawns = 3; }
+                
+                this.spawnTimer += dt;
+                if (this.spawnTimer > spawnInterval) {
+                    for(let i=0; i < simultaneousSpawns; i++) this.spawnItem(speedMultiplier);
+                    this.spawnTimer = 0;
+                }
+                this.items = this.items.filter(item => {
+                    item.y += item.speed; item.angle += item.swingSpeed;
+                    if (item.y > this.height + 50) {
+                        if (item.type === 'light' && !this.isInvincible) { this.lives--; this.updateHUD(); if (this.lives <= 0) this.gameOver(); }
+                        return false;
+                    } return true;
+                });
+                if (Math.floor(this.elapsedTime * 10) % 10 === 0) this.updateHUD();
+            }
+            this.drawItems(); 
+            this.drawParticles();
+            requestAnimationFrame(this.loop);
+        },
+        spawnItem(speedMultiplier) {
+            let type = 'light'; let img = null; let rand = Math.random();
+            let bombChance = Math.min(0.25, 0.15 + (this.elapsedTime * 0.002));
+            if (rand > (1 - 0.04)) { type = 'super'; img = this.assets.star; }
+            else if (rand < bombChance) { type = 'bomb'; img = this.assets.bomb; }
+            else { type = 'light'; if (this.assets.lights.length > 0) img = this.assets.lights[Math.floor(Math.random() * this.assets.lights.length)]; }
+            this.items.push({
+                x: Math.random() * (this.width - 60) + 30, y: -50 - (Math.random() * 100),
+                radius: 30, speed: (Math.random() * 2 + 3) * speedMultiplier,
+                angle: 0, swingSpeed: (Math.random() - 0.5) * 0.1, type: type, img: img
+            });
+        },
+        drawItems() {
+            this.items.forEach(item => {
+                this.ctx.save(); this.ctx.translate(item.x, item.y); this.ctx.rotate(Math.sin(item.angle * 5) * 0.3);
+                if (item.img) {
+                    let size = 60; if (item.type === 'super') size = 70;
+                    if (item.type === 'light') { this.ctx.shadowBlur = 10; this.ctx.shadowColor = "white"; }
+                    if (item.type === 'super') this.ctx.rotate(Date.now() / 150);
+                    this.ctx.drawImage(item.img, -size/2, -size/2, size, size);
+                } else { this.ctx.fillStyle = "red"; this.ctx.beginPath(); this.ctx.arc(0,0,20,0,Math.PI*2); this.ctx.fill(); }
+                this.ctx.restore();
+            });
+        },
+        drawParticles() {
+            this.particles = this.particles.filter(p => {
+                p.x += p.vx; p.y += p.vy; p.life -= 0.02;
+                this.ctx.save(); this.ctx.globalAlpha = Math.max(0, p.life); this.ctx.font = "20px Arial"; this.ctx.fillStyle = p.color; this.ctx.fillText(p.text, p.x, p.y); this.ctx.restore();
+                return p.life > 0;
+            });
+        },
+        
+        // ================= [修改] 强制让树高达到屏幕的 55% =================
+        drawBackgroundTree() {
+            if (!this.assets.tree || !this.assets.tree.complete) return;
+            const img = this.assets.tree;
+            
+            // 目标高度：屏幕高度的 55%
+            let drawHeight = this.height * 0.55;
+            
+            // 根据原图宽高比计算宽度
+            let drawWidth = drawHeight * (img.width / img.height);
+            
+            // 水平居中
+            let x = (this.width - drawWidth) / 2;
+            let y = this.height - drawHeight; // 底部对齐
+            
+            this.ctx.drawImage(img, x, y, drawWidth, drawHeight);
+
+            // 绘制雪花
+            this.ctx.fillStyle = "rgba(255,255,255,0.4)";
+            let time = Date.now() / 1000;
+            for(let i=0; i<30; i++) {
+                let sx = (Math.sin(i * 132) * 9999 + time * 20) % this.width;
+                if(sx < 0) sx += this.width;
+                let sy = (i * 123 + time * (100 + i * 5)) % this.height;
+                this.ctx.beginPath(); this.ctx.arc(sx, sy, (i%3)+2, 0, Math.PI*2); this.ctx.fill();
+            }
+        }
+    };
+
+    window.onload = () => Game.init();
+
+</script>
+</body>
+</html>
