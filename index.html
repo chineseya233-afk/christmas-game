@@ -305,13 +305,13 @@
             });
         },
         
-        // ================= [修改] 强制让树高达到屏幕的 55% =================
+        // ================= [修改] 强制让树高达到屏幕的 75% =================
         drawBackgroundTree() {
             if (!this.assets.tree || !this.assets.tree.complete) return;
             const img = this.assets.tree;
             
-            // 目标高度：屏幕高度的 55%
-            let drawHeight = this.height * 0.55;
+            // 目标高度：屏幕高度的 75%
+            let drawHeight = this.height * 0.75;
             
             // 根据原图宽高比计算宽度
             let drawWidth = drawHeight * (img.width / img.height);
@@ -338,4 +338,5 @@
 
 </script>
 </body>
+
 </html>
